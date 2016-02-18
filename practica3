@@ -1,0 +1,258 @@
+#!/bin/bash
+
+
+# sysinfo_page - Un script que produce un archivo HTML
+TITLE="Información del sistema para $HOSTNAME"
+RIGHT_NOW=$(date +"%x a las %r")
+TIME_STAMP="Actualizada el $RIGHT_NOW por $USER"
+interactive=
+filename=sysinfo_page.html
+signal=0
+regexp=
+filter=
+
+
+clear
+usage()
+{
+   echo "usage: sysinfo_page [[[-f file ] [-p] [-i]] | [-h]]"
+}
+
+
+while [ "$1" != "" ]; do
+   case $1 in
+       -f | --file )           	shift
+					filename=$1
+					;;
+       -i | --interactive )    	interactive=1
+					;;
+       -h | --help )           	usage
+					exit
+					;;
+       -p | --partitions-filter ) 	shift
+					filter=1
+					regexp=$1
+					;;
+       * )                     	usage
+					error_exit
+   esac
+   shift
+done
+
+##### Funciones
+system_info()
+{
+   echo "<h2>Información de versión del sistema</h2>"
+   echo "<pre>"
+   lsb_release -a
+   echo "</pre>"
+}
+
+
+show_uptime()
+{
+   echo "<h2>Tiempo de encendido del sistema</h2>"
+   echo "<pre>"
+   uptime
+   echo "</pre>"
+}
+
+
+drive_space()
+{
+  # Espacio que ocupa
+   echo "<h2>Informacion de los discos duros</h2>"
+   if [ "$filter" = "1" ]; then
+      echo "<pre>"
+      df | head -n1
+      df | grep -E $regexp
+      echo "<pre>"
+   else
+      echo "<pre>"
+      df
+      echo "</pre>"
+   fi
+}
+
+
+
+home_space()
+{
+   var_dir=
+   var_arch=
+   var_usad=
+   usuario=
+   # Función de stub temporal
+   echo "<h2>Informacion del espacio ocupado por cada directorio personal</h2>"
+   echo "<pre>"
+   if [ "$USER" = "root" ]; then 
+    USERS=$(cut -d':' -f1 /etc/passwd)
+    echo "<pre>Eres usuario root.</pre>"
+    printf "\nDirectorios	Archivos	Usado		Directorio\n"
+    for u in $USERS
+      do
+      ID=$(id -u $u)
+      if [ "$ID" -ge 1000 ] ; then
+        if [ -d /home/${u} ] ; then
+	  var_dir=$(find  /home/${u} -type d | wc -l)
+	  var_arch=$(find /home/${u}  -type f | wc -l)
+	  var_usad=$(du -s /home/${u} )
+	  printf "%s		%s		%s	%s\n" "$var_dir" "$var_arch" "$var_usad"
+        fi
+      fi
+done
+
+   else echo "<pre>No eres usuario root.</pre>"
+   var_dir=$(find  /home/$USER -type d | wc -l)
+   var_arch=$(find /home/$USER  -type f | wc -l)
+   var_usad=$(du -s /home/$USER )
+   printf "\nDirectorios	Archivos	Usado		Directorio\n"
+   printf "%s		%s		%s	%s\n" "$var_dir" "$var_arch" "$var_usad"
+   fi
+   echo "</pre>"
+}
+
+
+open_files()
+{
+USERS=$(cut -d':' -f1 /etc/passwd)
+   archv=
+   echo "<h2>Número de archivos abiertos</h2>"
+   echo "<pre>"
+   printf "Usuario	Nº Archivos\n"
+   for u in $USERS
+      do
+      ID=$(id -u $u)
+      if [ "$ID" -ge 1000 ] ; then
+        if [ "-d /home/${u}" ] ; then
+	  archv=$(lsof -u ${u} | wc -l | tail -n1)
+	  printf "%s\t%s\n" "$u" "$archv"
+        fi
+      fi
+done
+   echo "</pre>"
+   
+}
+
+
+
+
+error_exit()
+{
+  echo "<pre>ERROR, opción no soportada.</pre>"
+  exit 1
+}
+
+imprimir()
+{
+cat > $filename << _EOF_ 
+<html>
+<head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>
+  $TITLE
+  </title>
+</head>
+
+<body>
+
+  <h1>$TITLE</h1>
+  <p>$TIME_STAMP</p>
+    $(system_info)
+    $(show_uptime)
+    $(drive_space)
+    $(home_space)
+    $(open_files)
+</body>
+</html>
+_EOF_
+}
+
+
+
+
+if [ "cd which uptime" ]; then
+ 
+  if [ "test -x uptime" ]; then 
+   echo "El comando uptime existe"
+  
+  else 
+   echo "¡No existe el comando uptime!" 1>&2
+   exit 1
+  fi
+fi
+
+
+if [ "cd which du" ]; then
+  
+ if [ "test -x du" ]; then 
+   echo "El comando du existe"
+ 
+ else 
+  echo "¡No existe el comando du!" 1>&2
+  exit 1
+ fi
+fi
+
+
+if [ "cd which df" ]; then
+  
+ if [ "test -x df" ]; then 
+    echo "El comando df existe"
+ 
+ else 
+  echo "¡No existe el comando df!" 1>&2
+  exit 1
+ fi
+fi
+
+if [ "cd which lsof" ]; then
+  
+ if [ "test -x lsof" ]; then 
+    echo "El comando lsof existe"
+ 
+ else 
+  echo "¡No existe el comando lsof!" 1>&2
+  exit 1
+ fi
+fi
+
+
+
+
+
+if [ "$interactive" = "1" ]; then
+    while [ "$signal" = "0" ]; do
+    echo  "Introduzca el nombre que desea para el HTML > "
+    read nombre
+      if [ -f $nombre ]; then
+	echo  "Existe el archivo. ¿Desea remplazarlo?[s/n]"
+	read opcion
+	if [ "$opcion" = "s" ]; then
+	  signal=1
+	  filename=$nombre
+	fi
+      else 
+	echo "El archivo no existe, se creará con el nombre descrito."
+	filename=$nombre
+	signal=1
+      fi
+     done
+     imprimir
+     else
+     imprimir
+fi
+
+
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+

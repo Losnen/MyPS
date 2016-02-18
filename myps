@@ -1,0 +1,279 @@
+#!/bin/bash
+
+
+
+#   Variable global que contendrá los PIDs
+VAR_PID=
+#   Señal que indica si en las funciones get_ hay que imprimir
+PRINT_SIGNAL=0
+EXTRA_PRINT=0
+#   Variables auxiliares con diversos objetivos.
+VAR_AUX1=
+VAR_AUX2=
+
+usage()
+{
+echo -e " ./ myps [-p  PID] [-n comando] [-h] [(-np y -pn no son compatibles)] "
+}
+
+
+get_cmdline()
+{
+#   Del siguiente comando obtenemos la linea de comandos del proceso.
+
+  dummy_var=$(cat /proc/${VAR_PID}/cmdline 2> /dev/null)
+  VAR_AUX2=$dummy_var
+  
+  if [ "$PRINT_SIGNAL" != "0" ]; then
+    if [ "${dummy_var}" != "" ]; then
+      printf "|%-25b" "$dummy_var"
+    else
+      printf " |%-25b" " "
+    fi
+   fi
+    
+}
+
+get_user()
+{
+#   del siguiente comando obtenemos el nombre del usuario.
+#   mediante el egrep optenemos el UID del proceso
+#   mediante el getent obtenemos el nombre del usaruio al que pertenece ese UID
+
+  usuario=$(getent passwd $(egrep Uid /proc/$VAR_PID/status 2> /dev/null | cut -f2) | cut -d: -f1)
+  
+  if [ "${usuario}" != "" ]; then
+    printf "|%-20b" "$usuario"
+  else
+    printf "|%-20b" " "
+  fi
+}
+
+get_cwd()
+{
+
+#   el readlink nos aporta la ruta a la que está apuntando cwd.
+#   de lo que obtendremos el directorio de trabajo actual del proceso
+
+  dummy_var=$(readlink /proc/${VAR_PID}/cwd 2> /dev/null)
+  
+  if [ "${dummy_var}" != "" ]; then
+    printf "|%-40b" "$dummy_var"
+  else
+    printf "|%-40b" " "
+  fi
+  
+}
+
+get_group()
+{
+#   El siguiente comando obtiene el nombre del grupo.
+#   mediante egrep obtenemos el GID del proceso
+#   mediante eñ getent obtenemos el nombre del usuario al que pertenece ese GID
+
+  
+  grupo=$(getent group $(egrep Gid /proc/${VAR_PID}/status | cut -f2) 2> /dev/null | cut -d: -f1)
+  
+  if [ "${grupo}" != "" ]; then
+    printf "|%-20b" "$grupo"
+  else
+    printf "|%-20b" " "
+  fi
+}
+
+
+get_ppid()
+{
+#   El siguiente comando obtiene el PID del proceso padre.
+#   mediante el egrep obtienes el PPID
+
+  padre=$(egrep PPid /proc/${VAR_PID}/status 2> /dev/null | cut -f2)
+  
+  if [ "${padre}" != "" ]; then
+    printf "|%-20b" "$padre"
+  else
+    printf "|%-20b" " "
+  fi
+  
+}
+
+get_state()
+{
+#   El siguiente comano obtiene el estado del proceso.
+#   mediante el egrep obtienes el estado
+
+  estado=$(egrep State /proc/${VAR_PID}/status 2> /dev/null | cut -f2,3)
+  
+  if [ "${estado}" != "" ]; then
+    printf "|%-40b" "$estado"
+  else
+    printf "|%-40b" " "
+  fi
+
+}
+
+get_threads()
+{
+#   El siguiente comando obtiene el número de hilos del proceso.
+#   mediante el egrep obtendremos ese número
+
+  hilos=$(egrep Threads /proc/${VAR_PID}/status 2> /dev/null | cut -f2)
+  
+  if [ "${hilos}" != "" ]; then
+    printf "|%-16b" "$hilos"
+  else
+    printf "|%-16b" " "
+  fi
+}
+
+my_default()
+{
+#   Ésta es la opcion  por defecto en caso de que no se le pase ningún argumento al programa.
+
+echo -e "\nSe le mostrarán por pantalla los procesos actuales en /proc:\n"
+
+# Imprime la Lista de procesos.
+
+printf "%s\n" " $(ps x | cut -c 1-5 | sort -n) "
+hecho=0
+
+while [ ${hecho} -eq 0 ]; do      # Este bucle tiene por objetivo Pedir un PID hasta que sea correcto
+echo -e "\nIntroduzca el PID del proceso :"
+read mipid
+
+  if [ -d /proc/${mipid} ] ; then
+    hecho=1
+    VAR_PID=$mipid
+    imprimir
+    echo -e "\n"
+   else
+    echo "El PID que has introducido no existe."
+  fi
+done
+
+}
+
+imprimir_extra()
+{
+if [ $EXTRA_PRINT -eq 1 ]; then
+  printf "\nLímites configurados del proceso: \n"
+  cat /proc/${VAR_PID}/limits  
+  printf "\n"
+  printf " Estadísticas de operaciones de E/S:\n"
+  cat /proc/${VAR_PID}/io      
+  printf "\n"
+ fi
+
+}
+
+imprimir()
+{
+ printf "\n***INFORMACION DE PROCESO***\n\n"
+ printf "|%-40b|%-16b |%-40b|%-25b \n" "Estado del proceso" "Nº Hilos" "Directorio de Trabajo" "Línea de comandos"
+ PRINT_SIGNAL=1
+ get_state
+ get_threads 
+ get_cwd 
+ get_cmdline 
+ echo -e "\n\nA continuación se mostrará algo mas de información.\n"
+ printf "|%-20b|%-20b|%-20b \n" "Usuario" "Grupo" "PPID"
+ get_user
+ get_group
+ get_ppid
+ printf "\n"
+ imprimir_extra
+}
+
+
+
+comand_name()
+{
+  dummy=$(basename "${VAR_AUX2}" 2> /dev/null)
+  VAR_AUX2=$dummy
+}
+
+
+ error_exit1()
+ {
+   echo -e "\n****ERROR***"
+   echo -e "Opción no soportada. Para mas iformación ejecute el programa con la opción -h.\n"
+   exit 1
+ }
+ 
+ my_n()
+ {
+    dummy=$(ls /proc | grep [[:digit:]] | sort -n)  # En esta variable guardaremos todos los procesos en /proc
+    existe=0					     #Éste contador es para saber si hay procesos vinculados al comando
+    for a in $dummy
+    do
+      VAR_PID=${a}				     #Le damos el valor de 'a' a VAR_PID ya que esta última es una variable global
+						     #y asi podemos usar los PIDs en las otras funciones
+      get_cmdline
+      comand_name				     #ejecutamos comand_name para obtener el nombre del comando.
+      
+      if [[ $VAR_AUX2 == $VAR_AUX1 ]]; then  #si el basename del cmdline del proceso ces igual el comando
+	  existe=1
+	  printf "\n*****************\n"
+	  printf "* PID: %-7b *\n" "$VAR_PID"
+	  printf "*****************\n"
+	  EXTRA_PRINT=1
+	  imprimir				      #entonces imprimes la información del proceso
+	  PRINT_SIGNAL=0
+	  #else el unico proceso es el asociado a la ejecucion de ese comando.
+      fi
+     done
+     
+     if [ "$existe" != "1" ]; then
+     echo -e "\n***AVISO***"
+     echo -e "No existe ningun proceso vinculado al comando descrito.\n"
+     exit 2
+     fi
+ }
+ 
+my_p()
+{
+  if [ -d /proc/${VAR_PID} ]; then  #Miramos si existe un proceso en /proc con es PID
+    PRINT_SIGNAL=1			
+    imprimir			     
+   else
+    echo "No existe ningun proceso con ese PID."
+    exit 3
+   fi
+}
+
+ if [ "$1" != "" ]; then
+    case $1 in
+         -n )          if [ "$2" != "-p" ];then
+			  shift
+			  EXTRA_PRINT=1
+			  VAR_AUX1=$1
+			  my_n
+  			else
+			  error_exit1
+  			fi
+   			;;
+         -p )    	if [ "$2" != "-n" ];then
+			  shift
+			  EXTRA_PRINT=1
+			  VAR_PID=$1
+			  my_p
+			 else 
+			  error_exit1
+			 fi
+  			;;
+         -h | --help ) usage
+  			exit
+  			;;
+         -np | -pn ) 		shift
+  			error_exit1
+  			;;
+         * )		error_exit1
+    esac
+  else
+     my_default
+  fi
+
+
+
+
+

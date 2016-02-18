@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# sysinfo_page - Un script que produce un archivo HTML
+##### Constantes
+TITLE="Información del sistema para $HOSTNAME"
+RIGHT_NOW=$(date +"%x %r")
+TIME_STAMP="Actualizada el $RIGHT_NOW por $USER"
+
+filename=sysinfo_page.html
+interactive=
+signal=0
+buscar=
+regexp=
+##### Funciones
+usage()
+{
+   echo "usage: sysinfo_page [[[-f file ] [-p] [-i]] | [-h]]"
+}
+
+
+while [ "$1" != "" ]; do
+   case $1 in
+       -f | --file )           shift
+                               filename=$1
+                               ;;
+       -i | --interactive )    interactive=1
+                               ;;
+       -p | --partitions-filter ) shift 
+                                  buscar=1
+                                  regexp=$1
+                               ;;       
+       -h | --help )           usage
+                               exit
+                               ;;
+       * )                     usage
+                               exit 1
+   esac
+   shift
+done
+
+
+system_info()
+{
+
+  echo "<h2>Información de versión del sistema</h2>"
+  echo "<pre>"
+  lsb_release -a 
+  echo "</pre>"
+
+}
+
+
+show_uptime()
+{
+
+   echo "<h2>Tiempo de encendido del sistema</h2>"
+   echo "<pre>"
+   uptime
+   echo "</pre>"
+
+}
+
+
+drive_space()
+{
+   
+   echo "<h2>Información del Disco Duro y sus particiones</h2>"
+   if [ $buscar = 1 ]; then
+   echo "<pre>"
+   df | head -n1
+   df | grep -E $regexp
+   echo "</pre>"
+   else 
+   echo "<pre>"
+   df
+   echo "</pre>"
+   fi
+   
+}
+
+
+home_space()
+{
+ echo "<p>Información del espacio ocupado</p>"
+ echo "<pre>"
+ if [ "$USER" = "root" ];
+ then du -s /home/* | sort -nr
+ else
+ du -s /home/$USER | sort -nr
+ fi
+ echo  "</pre>"
+
+}
+##### Programa principal
+
+
+
+principal()
+{
+cat > $filename << _EOF_ 
+<html>
+<head> <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  
+  <title>$TITLE</title>
+  
+</head>
+
+<body>
+  <h1>$TITLE</h1>
+   <p>$TIME_STAMP</p>
+   $(system_info)
+   $(show_uptime)
+   $(drive_space)
+   $(home_space)
+</body>
+</html>
+_EOF_
+}
+
+
+if [ "$interactive" = "1" ]; then
+ while [ "$signal" = "0" ]; do
+   echo "Introduzca el nombre del fichero"
+   read nombre 
+    if [ -f $nombre ]; then 
+     echo "Existe el archivo, ¿Desea reemplazarlo? [s/n]"
+     read opcion
+     if [ "$opcion" = "s" ]; then
+     signal=1
+     filename=$nombre
+    fi
+    else 
+    echo "El archivo no existe, se creará"
+      filename=$nombre
+      signal=1
+    fi
+     done
+     principal
+     else 
+     principal
+fi
+
+
+
+
+
